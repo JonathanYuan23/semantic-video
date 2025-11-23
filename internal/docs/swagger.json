@@ -1,0 +1,716 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "API for managing video indexing, frame extraction, and cloud uploads.",
+        "title": "Semantic Video API",
+        "contact": {},
+        "version": "1.0"
+    },
+    "host": "localhost:8080",
+    "basePath": "/",
+    "paths": {
+        "/cloud/auth": {
+            "post": {
+                "description": "Saves an access token used for cloud uploads and marks the connection as active.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "cloud"
+                ],
+                "summary": "Store cloud access token",
+                "parameters": [
+                    {
+                        "description": "Access token",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/daemon.CloudAuthRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/daemon.StatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/daemon.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/cloud/status": {
+            "get": {
+                "description": "Returns cloud connectivity status and pending upload information.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "cloud"
+                ],
+                "summary": "Get cloud status",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/daemon.CloudStatus"
+                        }
+                    }
+                }
+            }
+        },
+        "/config": {
+            "get": {
+                "description": "Returns the current configuration on GET and updates selected fields on PUT.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "config"
+                ],
+                "summary": "Get or update configuration",
+                "parameters": [
+                    {
+                        "description": "Fields to update (PUT only)",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/daemon.ConfigUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Update acknowledgment",
+                        "schema": {
+                            "$ref": "#/definitions/daemon.StatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/daemon.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Returns the current configuration on GET and updates selected fields on PUT.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "config"
+                ],
+                "summary": "Get or update configuration",
+                "parameters": [
+                    {
+                        "description": "Fields to update (PUT only)",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/daemon.ConfigUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Update acknowledgment",
+                        "schema": {
+                            "$ref": "#/definitions/daemon.StatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/daemon.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/folders": {
+            "post": {
+                "description": "Registers a folder path for scanning and returns its tracking ID.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "folders"
+                ],
+                "summary": "Track a folder for video discovery",
+                "parameters": [
+                    {
+                        "description": "Folder to track",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/daemon.AddFolderRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/daemon.AddFolderResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/daemon.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/health": {
+            "get": {
+                "description": "Returns service health and version.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Health check",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/daemon.HealthResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/jobs": {
+            "get": {
+                "description": "Returns all extraction and upload jobs with progress.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "jobs"
+                ],
+                "summary": "List jobs",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/daemon.Job"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/videos": {
+            "get": {
+                "description": "GET lists tracked videos; POST registers a new video for extraction.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "videos"
+                ],
+                "summary": "List or register videos",
+                "parameters": [
+                    {
+                        "description": "Video to register",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/daemon.AddVideoRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/daemon.AddVideoResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/daemon.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "GET lists tracked videos; POST registers a new video for extraction.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "videos"
+                ],
+                "summary": "List or register videos",
+                "parameters": [
+                    {
+                        "description": "Video to register",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/daemon.AddVideoRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/daemon.AddVideoResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/daemon.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/videos/{videoID}": {
+            "get": {
+                "description": "Returns stored metadata and indexing status for a video.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "videos"
+                ],
+                "summary": "Get video details",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Video ID",
+                        "name": "videoID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/daemon.Video"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/daemon.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/videos/{videoID}/cancel": {
+            "post": {
+                "description": "Attempts to cancel an active job for the given video.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "videos"
+                ],
+                "summary": "Cancel extraction job",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Video ID",
+                        "name": "videoID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/daemon.CancelJobResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/daemon.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/daemon.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/videos/{videoID}/extract": {
+            "post": {
+                "description": "Starts an extraction and upload job for the given video.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "videos"
+                ],
+                "summary": "Start extraction job",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Video ID",
+                        "name": "videoID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Extraction options",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/daemon.ExtractRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/daemon.StartJobResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/daemon.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/daemon.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "daemon.AddFolderRequest": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "example": "/videos"
+                },
+                "recursive": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "daemon.AddFolderResponse": {
+            "type": "object",
+            "properties": {
+                "folder_id": {
+                    "type": "string",
+                    "example": "fld_abcd1234"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "scheduled"
+                }
+            }
+        },
+        "daemon.AddVideoRequest": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "example": "/videos/sample.mp4"
+                }
+            }
+        },
+        "daemon.AddVideoResponse": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "example": "scheduled"
+                },
+                "video_id": {
+                    "type": "string",
+                    "example": "vid_abcd1234"
+                }
+            }
+        },
+        "daemon.CancelJobResponse": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "example": "cancelling"
+                }
+            }
+        },
+        "daemon.CloudAuthRequest": {
+            "type": "object",
+            "properties": {
+                "access_token": {
+                    "type": "string",
+                    "example": "token_abc123"
+                }
+            }
+        },
+        "daemon.CloudStatus": {
+            "type": "object",
+            "properties": {
+                "connected": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "last_successful_upload": {
+                    "type": "string",
+                    "example": "2024-01-01T12:10:00Z"
+                },
+                "pending_batches": {
+                    "type": "integer",
+                    "example": 0
+                },
+                "user_id": {
+                    "type": "string",
+                    "example": "user_123"
+                }
+            }
+        },
+        "daemon.Config": {
+            "type": "object",
+            "properties": {
+                "cloud_auth_status": {
+                    "type": "string",
+                    "example": "missing_token"
+                },
+                "cloud_base_url": {
+                    "type": "string",
+                    "example": "https://api.example.com"
+                },
+                "cloud_user_id": {
+                    "type": "string",
+                    "example": "user_123"
+                },
+                "frame_rate": {
+                    "type": "number",
+                    "example": 1
+                },
+                "frame_size": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    },
+                    "example": [
+                        400,
+                        400
+                    ]
+                },
+                "upload_batch_size": {
+                    "type": "integer",
+                    "example": 50
+                }
+            }
+        },
+        "daemon.ConfigUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "cloud_base_url": {
+                    "type": "string",
+                    "example": "https://api.example.com"
+                },
+                "frame_rate": {
+                    "type": "number",
+                    "example": 2
+                },
+                "frame_size": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    },
+                    "example": [
+                        640,
+                        480
+                    ]
+                },
+                "upload_batch_size": {
+                    "type": "integer",
+                    "example": 100
+                }
+            }
+        },
+        "daemon.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string",
+                    "example": "description of the error"
+                }
+            }
+        },
+        "daemon.ExtractRequest": {
+            "type": "object",
+            "properties": {
+                "reindex": {
+                    "type": "boolean",
+                    "example": false
+                }
+            }
+        },
+        "daemon.HealthResponse": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "example": "ok"
+                },
+                "version": {
+                    "type": "string",
+                    "example": "0.1.0"
+                }
+            }
+        },
+        "daemon.Job": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string",
+                    "example": "2024-01-01T12:00:00Z"
+                },
+                "job_id": {
+                    "type": "string",
+                    "example": "job_abcd1234"
+                },
+                "progress": {
+                    "type": "number",
+                    "example": 0.42
+                },
+                "status": {
+                    "type": "string",
+                    "example": "running"
+                },
+                "type": {
+                    "type": "string",
+                    "example": "extract_and_upload"
+                },
+                "updated_at": {
+                    "type": "string",
+                    "example": "2024-01-01T12:05:00Z"
+                },
+                "video_id": {
+                    "type": "string",
+                    "example": "vid_abcd1234"
+                }
+            }
+        },
+        "daemon.StartJobResponse": {
+            "type": "object",
+            "properties": {
+                "job_id": {
+                    "type": "string",
+                    "example": "job_abcd1234"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "started"
+                }
+            }
+        },
+        "daemon.StatusResponse": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "example": "ok"
+                }
+            }
+        },
+        "daemon.Video": {
+            "type": "object",
+            "properties": {
+                "duration_seconds": {
+                    "type": "integer",
+                    "example": 120
+                },
+                "frames_extracted": {
+                    "type": "integer",
+                    "example": 80
+                },
+                "frames_uploaded": {
+                    "type": "integer",
+                    "example": 80
+                },
+                "index_status": {
+                    "type": "string",
+                    "example": "indexing"
+                },
+                "last_error": {
+                    "type": "string",
+                    "example": "failed to decode frame"
+                },
+                "last_indexed_at": {
+                    "type": "string",
+                    "example": "2024-01-01T12:00:00Z"
+                },
+                "path": {
+                    "type": "string",
+                    "example": "/videos/sample.mp4"
+                },
+                "total_frames_expected": {
+                    "type": "integer",
+                    "example": 120
+                },
+                "video_id": {
+                    "type": "string",
+                    "example": "vid_abcd1234"
+                }
+            }
+        }
+    }
+}

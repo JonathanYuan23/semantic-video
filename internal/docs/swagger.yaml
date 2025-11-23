@@ -1,0 +1,484 @@
+basePath: /
+definitions:
+  daemon.AddFolderRequest:
+    properties:
+      path:
+        example: /videos
+        type: string
+      recursive:
+        example: true
+        type: boolean
+    type: object
+  daemon.AddFolderResponse:
+    properties:
+      folder_id:
+        example: fld_abcd1234
+        type: string
+      status:
+        example: scheduled
+        type: string
+    type: object
+  daemon.AddVideoRequest:
+    properties:
+      path:
+        example: /videos/sample.mp4
+        type: string
+    type: object
+  daemon.AddVideoResponse:
+    properties:
+      status:
+        example: scheduled
+        type: string
+      video_id:
+        example: vid_abcd1234
+        type: string
+    type: object
+  daemon.CancelJobResponse:
+    properties:
+      status:
+        example: cancelling
+        type: string
+    type: object
+  daemon.CloudAuthRequest:
+    properties:
+      access_token:
+        example: token_abc123
+        type: string
+    type: object
+  daemon.CloudStatus:
+    properties:
+      connected:
+        example: true
+        type: boolean
+      last_successful_upload:
+        example: "2024-01-01T12:10:00Z"
+        type: string
+      pending_batches:
+        example: 0
+        type: integer
+      user_id:
+        example: user_123
+        type: string
+    type: object
+  daemon.Config:
+    properties:
+      cloud_auth_status:
+        example: missing_token
+        type: string
+      cloud_base_url:
+        example: https://api.example.com
+        type: string
+      cloud_user_id:
+        example: user_123
+        type: string
+      frame_rate:
+        example: 1
+        type: number
+      frame_size:
+        example:
+        - 400
+        - 400
+        items:
+          type: integer
+        type: array
+      upload_batch_size:
+        example: 50
+        type: integer
+    type: object
+  daemon.ConfigUpdateRequest:
+    properties:
+      cloud_base_url:
+        example: https://api.example.com
+        type: string
+      frame_rate:
+        example: 2
+        type: number
+      frame_size:
+        example:
+        - 640
+        - 480
+        items:
+          type: integer
+        type: array
+      upload_batch_size:
+        example: 100
+        type: integer
+    type: object
+  daemon.ErrorResponse:
+    properties:
+      error:
+        example: description of the error
+        type: string
+    type: object
+  daemon.ExtractRequest:
+    properties:
+      reindex:
+        example: false
+        type: boolean
+    type: object
+  daemon.HealthResponse:
+    properties:
+      status:
+        example: ok
+        type: string
+      version:
+        example: 0.1.0
+        type: string
+    type: object
+  daemon.Job:
+    properties:
+      created_at:
+        example: "2024-01-01T12:00:00Z"
+        type: string
+      job_id:
+        example: job_abcd1234
+        type: string
+      progress:
+        example: 0.42
+        type: number
+      status:
+        example: running
+        type: string
+      type:
+        example: extract_and_upload
+        type: string
+      updated_at:
+        example: "2024-01-01T12:05:00Z"
+        type: string
+      video_id:
+        example: vid_abcd1234
+        type: string
+    type: object
+  daemon.StartJobResponse:
+    properties:
+      job_id:
+        example: job_abcd1234
+        type: string
+      status:
+        example: started
+        type: string
+    type: object
+  daemon.StatusResponse:
+    properties:
+      status:
+        example: ok
+        type: string
+    type: object
+  daemon.Video:
+    properties:
+      duration_seconds:
+        example: 120
+        type: integer
+      frames_extracted:
+        example: 80
+        type: integer
+      frames_uploaded:
+        example: 80
+        type: integer
+      index_status:
+        example: indexing
+        type: string
+      last_error:
+        example: failed to decode frame
+        type: string
+      last_indexed_at:
+        example: "2024-01-01T12:00:00Z"
+        type: string
+      path:
+        example: /videos/sample.mp4
+        type: string
+      total_frames_expected:
+        example: 120
+        type: integer
+      video_id:
+        example: vid_abcd1234
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: API for managing video indexing, frame extraction, and cloud uploads.
+  title: Semantic Video API
+  version: "1.0"
+paths:
+  /cloud/auth:
+    post:
+      consumes:
+      - application/json
+      description: Saves an access token used for cloud uploads and marks the connection
+        as active.
+      parameters:
+      - description: Access token
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/daemon.CloudAuthRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/daemon.StatusResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/daemon.ErrorResponse'
+      summary: Store cloud access token
+      tags:
+      - cloud
+  /cloud/status:
+    get:
+      description: Returns cloud connectivity status and pending upload information.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/daemon.CloudStatus'
+      summary: Get cloud status
+      tags:
+      - cloud
+  /config:
+    get:
+      consumes:
+      - application/json
+      description: Returns the current configuration on GET and updates selected fields
+        on PUT.
+      parameters:
+      - description: Fields to update (PUT only)
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/daemon.ConfigUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Update acknowledgment
+          schema:
+            $ref: '#/definitions/daemon.StatusResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/daemon.ErrorResponse'
+      summary: Get or update configuration
+      tags:
+      - config
+    put:
+      consumes:
+      - application/json
+      description: Returns the current configuration on GET and updates selected fields
+        on PUT.
+      parameters:
+      - description: Fields to update (PUT only)
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/daemon.ConfigUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Update acknowledgment
+          schema:
+            $ref: '#/definitions/daemon.StatusResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/daemon.ErrorResponse'
+      summary: Get or update configuration
+      tags:
+      - config
+  /folders:
+    post:
+      consumes:
+      - application/json
+      description: Registers a folder path for scanning and returns its tracking ID.
+      parameters:
+      - description: Folder to track
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/daemon.AddFolderRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/daemon.AddFolderResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/daemon.ErrorResponse'
+      summary: Track a folder for video discovery
+      tags:
+      - folders
+  /health:
+    get:
+      description: Returns service health and version.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/daemon.HealthResponse'
+      summary: Health check
+      tags:
+      - system
+  /jobs:
+    get:
+      description: Returns all extraction and upload jobs with progress.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/daemon.Job'
+            type: array
+      summary: List jobs
+      tags:
+      - jobs
+  /videos:
+    get:
+      consumes:
+      - application/json
+      description: GET lists tracked videos; POST registers a new video for extraction.
+      parameters:
+      - description: Video to register
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/daemon.AddVideoRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/daemon.AddVideoResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/daemon.ErrorResponse'
+      summary: List or register videos
+      tags:
+      - videos
+    post:
+      consumes:
+      - application/json
+      description: GET lists tracked videos; POST registers a new video for extraction.
+      parameters:
+      - description: Video to register
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/daemon.AddVideoRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/daemon.AddVideoResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/daemon.ErrorResponse'
+      summary: List or register videos
+      tags:
+      - videos
+  /videos/{videoID}:
+    get:
+      description: Returns stored metadata and indexing status for a video.
+      parameters:
+      - description: Video ID
+        in: path
+        name: videoID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/daemon.Video'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/daemon.ErrorResponse'
+      summary: Get video details
+      tags:
+      - videos
+  /videos/{videoID}/cancel:
+    post:
+      description: Attempts to cancel an active job for the given video.
+      parameters:
+      - description: Video ID
+        in: path
+        name: videoID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/daemon.CancelJobResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/daemon.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/daemon.ErrorResponse'
+      summary: Cancel extraction job
+      tags:
+      - videos
+  /videos/{videoID}/extract:
+    post:
+      consumes:
+      - application/json
+      description: Starts an extraction and upload job for the given video.
+      parameters:
+      - description: Video ID
+        in: path
+        name: videoID
+        required: true
+        type: string
+      - description: Extraction options
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/daemon.ExtractRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/daemon.StartJobResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/daemon.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/daemon.ErrorResponse'
+      summary: Start extraction job
+      tags:
+      - videos
+swagger: "2.0"
