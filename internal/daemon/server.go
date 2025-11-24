@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/cors"
 	httpSwagger "github.com/swaggo/http-swagger"
 )
 
@@ -59,6 +60,19 @@ func NewServer() *Server {
 func (s *Server) Routes() http.Handler {
 	r := chi.NewRouter()
 
+	// Logging
+	r.Use(logRequestMiddleware)
+
+	// CORS to allow local client
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"http://localhost:*", "http://127.0.0.1:*"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		ExposedHeaders:   []string{"Link"},
+		AllowCredentials: true,
+		MaxAge:           300,
+	}))
+
 	// Swagger docs
 	r.Get("/swagger", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/swagger/index.html", http.StatusMovedPermanently)
@@ -73,6 +87,7 @@ func (s *Server) Routes() http.Handler {
 	r.MethodFunc(http.MethodPut, "/config", s.handleConfig)
 
 	// Folders
+	r.MethodFunc(http.MethodGet, "/folders", s.handleFolders)
 	r.MethodFunc(http.MethodPost, "/folders", s.handleFolders)
 
 	// Videos

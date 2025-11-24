@@ -8,6 +8,7 @@ require github.com/google/uuid v1.6.0
 
 require (
 	github.com/go-chi/chi/v5 v5.2.3
+	github.com/go-chi/cors v1.2.2
 	github.com/swaggo/http-swagger v1.3.4
 	github.com/swaggo/swag v1.16.6
 	github.com/u2takey/ffmpeg-go v0.5.0

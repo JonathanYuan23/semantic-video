@@ -1,31 +1,21 @@
-# Semantic Video Daemon
+# Semantic Video
 
-API server for managing frame extraction and cloud upload state.
+API daemon for frame extraction plus an Electron-wrapped React client.
 
-## Prerequisites
-- Go 1.22+
-- FFmpeg installed (required for frame extraction)
+## Daemon (API)
+- **Prereqs**: Go 1.22+, FFmpeg installed
+- **Install deps**: `go mod tidy`
+- **Run**: `go run cmd/daemon/main.go` (listens on `:8080`)
+- **Swagger docs**:
+  - Generate: `swag init -g cmd/daemon/main.go -o internal/docs`
+  - View UI: http://localhost:8080/swagger
+- Env: `FRAMES_ROOT` optional (defaults to `frames/`)
 
-## Setup
-1) Install dependencies:
-```bash
-go mod tidy
-```
-2) (Optional) Set `FRAMES_ROOT` to change where extracted frames are stored (defaults to `frames/`).
-
-## Run the daemon
-```bash
-go run cmd/daemon/main.go
-```
-The server listens on `:8080`.
-
-## Swagger / OpenAPI docs
-1) Generate docs (after updating handlers or models):
-```bash
-swag init -g cmd/daemon/main.go -o internal/docs
-```
-2) Start the server and open the Swagger UI:
-```
-http://localhost:8080/swagger
-```
-The UI serves `doc.json` from `internal/docs` via `http-swagger`.
+## Client (Electron + Vite/React)
+- **Prereqs**: Node.js 18+, npm, Electron-capable environment (WSLg or native desktop)
+- **Install deps**: `cd client && npm install`
+- **Dev (Electron + Vite)**: `npm run electron:dev`
+  - Vite dev server fixed at http://localhost:5173; Electron launches with preload exposing `window.electronAPI`.
+  - Use DevTools in the Electron window; `!!window.electronAPI` should be true.
+- **Prod build (client-only)**: `npm run build` (outputs `dist/`; Electron packaging not wired yet)
+- **File/folder selection**: Use the built-in pickers in the Video Library tab (no manual path entry); absolute paths are sent to the daemon. Recursive scan toggle is available.
