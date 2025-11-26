@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"net/http"
+	"strings"
 )
 
 // handleHealth godoc
@@ -43,6 +44,7 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 			FrameSize       *[2]int  `json:"frame_size"`
 			UploadBatchSize *int     `json:"upload_batch_size"`
 			CloudBaseURL    *string  `json:"cloud_base_url"`
+			VectorDBURL     *string  `json:"vectordb_url"`
 		}
 		if err := decodeJSON(r, &req); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid json payload")
@@ -60,6 +62,10 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.CloudBaseURL != nil {
 			s.config.CloudBaseURL = *req.CloudBaseURL
+		}
+		if req.VectorDBURL != nil {
+			s.config.VectorDBURL = strings.TrimRight(*req.VectorDBURL, "/")
+			s.vectorClient = NewVectorDBClient(s.config.VectorDBURL)
 		}
 		s.mu.Unlock()
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})

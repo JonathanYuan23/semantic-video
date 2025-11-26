@@ -144,3 +144,21 @@ func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "cancelling"})
 }
+
+// handleVideoFile streams a registered video's file contents.
+func (s *Server) handleVideoFile(w http.ResponseWriter, r *http.Request) {
+	videoID := chi.URLParam(r, "videoID")
+	s.mu.RLock()
+	video, ok := s.videos[videoID]
+	s.mu.RUnlock()
+	if !ok {
+		writeError(w, http.StatusNotFound, "video not found")
+		return
+	}
+	if strings.TrimSpace(video.Path) == "" {
+		writeError(w, http.StatusNotFound, "video path missing")
+		return
+	}
+
+	http.ServeFile(w, r, video.Path)
+}

@@ -2,6 +2,8 @@ import os
 import io
 import uuid
 import re
+import shutil
+import tempfile
 from typing import List, Optional, Dict
 import logging
 from pathlib import Path
@@ -9,7 +11,7 @@ from collections import defaultdict
 import cv2
 import numpy as np
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from pydantic import BaseModel
 from PIL import Image
 from sentence_transformers import SentenceTransformer
@@ -28,8 +30,14 @@ chroma_client: chromadb.PersistentClient = None
 collection: chromadb.Collection = None
 
 MODEL_NAME = "clip-ViT-B-32"
+STATELESS_MODE = os.getenv("STATELESS_TEST") == "1" or os.getenv("STATELESS_MODE") == "1"
+DEFAULT_CHROMA_PATH = "chroma_data"
 # Use environment variable for path, default to local relative path
-CHROMA_DB_PATH = os.getenv("CHROMA_DB_PATH", "chroma_data")
+CHROMA_DB_PATH = os.getenv("CHROMA_DB_PATH", DEFAULT_CHROMA_PATH)
+_CLEANUP_CHROMA_PATH: Optional[str] = None
+if STATELESS_MODE:
+    CHROMA_DB_PATH = tempfile.mkdtemp(prefix="chroma-")
+    _CLEANUP_CHROMA_PATH = CHROMA_DB_PATH
 COLLECTION_NAME = "images"
 
 # Pydantic Models
@@ -51,7 +59,7 @@ class SearchResponse(BaseModel):
 class VideoSearchRequest(BaseModel):
     query: str
     top_k: int = 5
-    cluster_threshold: float = 5.0  # seconds
+    cluster_threshold: float = 5.0  # kept for compatibility, unused now
 
 class TimestampRange(BaseModel):
     start: float
@@ -90,12 +98,27 @@ async def startup_event():
     logger.info(f"Initializing ChromaDB at {CHROMA_DB_PATH}...")
     try:
         chroma_client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
-        collection = chroma_client.get_or_create_collection(name=COLLECTION_NAME)
+        collection = chroma_client.get_or_create_collection(
+            name=COLLECTION_NAME,
+            metadata={"hnsw:space": "cosine"}
+        )
     except Exception as e:
         logger.error(f"Failed to initialize ChromaDB: {e}")
         raise RuntimeError("Could not initialize vector database.")
         
     logger.info("Service startup complete.")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup temporary Chroma storage when running in stateless mode."""
+    global _CLEANUP_CHROMA_PATH
+    if _CLEANUP_CHROMA_PATH and os.path.isdir(_CLEANUP_CHROMA_PATH):
+        try:
+            shutil.rmtree(_CLEANUP_CHROMA_PATH, ignore_errors=True)
+            logger.info(f"Removed temporary Chroma data at {_CLEANUP_CHROMA_PATH}")
+        except Exception as e:
+            logger.error(f"Failed to remove Chroma data at shutdown: {e}")
 
 # Helper Functions
 def embed_image(image_bytes: bytes) -> List[float]:
@@ -242,7 +265,14 @@ def get_video_frames(frames_directory: str, video_id: str) -> List[str]:
 
 # Endpoints
 @app.post("/upload_image", response_model=IndexImageResponse)
-async def upload_image(file: UploadFile = File(...)):
+async def upload_image(
+    file: UploadFile = File(...),
+    video_id: Optional[str] = Form(None),
+    video_path: Optional[str] = Form(None),
+    timestamp: Optional[float] = Form(None),
+    frame_number: Optional[int] = Form(None),
+    frame_rate: Optional[float] = Form(None),
+):
     """
     Upload an image file and index it into the database for search.
     """
@@ -262,11 +292,23 @@ async def upload_image(file: UploadFile = File(...)):
 
         # Generate ID and metadata
         image_id = str(uuid.uuid4())
+        is_video_frame = bool(video_id)
         metadata = {
             "filename": file.filename,
             "content_type": file.content_type or "unknown",
-            "type": "image"
+            "type": "video_frame" if is_video_frame else "image",
         }
+
+        if is_video_frame:
+            metadata.update(
+                {
+                    "video_id": video_id,
+                    "video_path": video_path or "",
+                    "frame_number": frame_number,
+                    "timestamp": timestamp,
+                    "frame_rate": frame_rate,
+                }
+            )
 
         # Store in Chroma
         collection.add(
@@ -508,7 +550,9 @@ async def search_video(request: VideoSearchRequest):
                 metadata = metadatas[i]
                 video_id = metadata.get("video_id")
                 timestamp = metadata.get("timestamp", 0)
-                score = 1 - distances[i] if i < len(distances) else 0  # Convert distance to similarity
+                distance = distances[i] if i < len(distances) else 0
+                # Convert cosine distance (0 best) to similarity in [0,1]
+                score = max(0.0, 1.0 - distance)
                 
                 if video_id:
                     video_results[video_id].append({
@@ -519,43 +563,27 @@ async def search_video(request: VideoSearchRequest):
         
         # Process results for each video
         final_results = []
-        
+
         for video_id, matches in video_results.items():
             if not matches:
                 continue
                 
-            # Sort by timestamp
-            matches.sort(key=lambda x: x["timestamp"])
-            
-            # Extract timestamps and scores
-            timestamps = [match["timestamp"] for match in matches]
-            scores = [match["score"] for match in matches]
+            # Sort matches by score (desc)
+            matches.sort(key=lambda x: x["score"], reverse=True)
             video_path = matches[0]["video_path"]
-            
-            # Cluster nearby timestamps
-            timestamp_ranges = cluster_timestamps(timestamps, request.cluster_threshold)
-            
-            # Create timestamp ranges with relevance scores
+
             timestamp_results = []
-            for start_ts, end_ts in timestamp_ranges:
-                # Find scores for timestamps in this range
-                range_scores = [
-                    score for ts, score in zip(timestamps, scores)
-                    if start_ts <= ts <= end_ts
-                ]
-                avg_score = sum(range_scores) / len(range_scores) if range_scores else 0
-                
+            for match in matches:
+                ts = match.get("timestamp", 0)
+                score = match.get("score", 0)
                 timestamp_results.append(TimestampRange(
-                    start=start_ts,
-                    end=end_ts,
-                    relevance_score=avg_score
+                    start=ts,
+                    end=ts,
+                    relevance_score=score
                 ))
-            
-            # Sort by relevance score
-            timestamp_results.sort(key=lambda x: x.relevance_score, reverse=True)
-            
-            max_score = max(scores) if scores else 0
-            
+
+            max_score = timestamp_results[0].relevance_score if timestamp_results else 0
+
             final_results.append(VideoSearchResult(
                 video_id=video_id,
                 video_path=video_path,

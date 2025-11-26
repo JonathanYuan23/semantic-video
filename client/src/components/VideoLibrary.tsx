@@ -85,9 +85,11 @@ export const VideoLibrary = ({ onSelectVideo }: VideoLibraryProps) => {
   };
 
   const formatProgress = (video: VideoRecord) => {
-    if (!video.totalFramesExpected) return "pending";
-    const pct = Math.min(100, Math.round((video.framesExtracted / video.totalFramesExpected) * 100));
-    return `${pct}% frames`;
+    const total = video.totalFramesExpected || video.framesExtracted || 0;
+    const indexed = video.framesUploaded ?? video.framesExtracted ?? 0;
+    if (!total) return "pending";
+    const pct = Math.min(100, Math.round((indexed / total) * 100));
+    return `${pct}% indexed`;
   };
 
   useEffect(() => {

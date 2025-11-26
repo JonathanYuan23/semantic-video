@@ -13,6 +13,8 @@ type Config struct {
 	CloudBaseURL    string  `json:"cloud_base_url" example:"https://api.example.com"`
 	CloudUserID     string  `json:"cloud_user_id" example:"user_123"`
 	CloudAuthStatus string  `json:"cloud_auth_status" example:"missing_token"`
+	VectorDBURL     string  `json:"vectordb_url" example:"http://localhost:8000"`
+	Stateless       bool    `json:"stateless" example:"false"`
 }
 
 // Folder represents a tracked folder to scan for videos.
@@ -76,6 +78,7 @@ type ConfigUpdateRequest struct {
 	FrameSize       *[2]int  `json:"frame_size" swaggertype:"array,integer" example:"640,480"`
 	UploadBatchSize *int     `json:"upload_batch_size" example:"100"`
 	CloudBaseURL    *string  `json:"cloud_base_url" example:"https://api.example.com"`
+	VectorDBURL     *string  `json:"vectordb_url" example:"http://localhost:8000"`
 }
 
 // StatusResponse is a generic status wrapper.

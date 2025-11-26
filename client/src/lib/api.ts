@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+export const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
 
 type RequestInitWithoutBody = Omit<RequestInit, "body">;
 
@@ -79,6 +79,19 @@ export interface JobRecord {
   progress: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SearchTimestamp {
+  start: number;
+  end: number;
+  relevanceScore: number;
+}
+
+export interface SearchMatch {
+  videoId: string;
+  videoPath: string;
+  timestamp: number;
+  relevanceScore: number;
 }
 
 const mapVideo = (v: any): VideoRecord => ({
@@ -166,6 +179,30 @@ export async function cancelJob(videoId: string) {
 export async function listJobs(): Promise<JobRecord[]> {
   const data = await apiFetch<any[]>("/jobs");
   return data.map(mapJob);
+}
+
+export async function searchVideos(query: string, topK = 5, clusterThreshold = 5): Promise<SearchMatch[]> {
+  const data = await apiFetch<{ results: any[] }>("/search_video", {
+    method: "POST",
+    body: JSON.stringify({ query, top_k: topK, cluster_threshold: clusterThreshold }),
+  });
+
+  const matches: SearchMatch[] = [];
+  (data.results || []).forEach((item) => {
+    const videoId = item.video_id;
+    const videoPath = item.video_path;
+    (item.timestamps || []).forEach((ts: any) => {
+      matches.push({
+        videoId,
+        videoPath,
+        timestamp: typeof ts.start === "number" ? ts.start : 0,
+        relevanceScore: typeof ts.relevance_score === "number" ? ts.relevance_score : item.max_relevance_score || 0,
+      });
+    });
+  });
+
+  matches.sort((a, b) => b.relevanceScore - a.relevanceScore);
+  return matches;
 }
 
 export async function getConfig() {

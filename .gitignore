@@ -1,0 +1,33 @@
+# OS / editor
+.DS_Store
+*.swp
+*.swo
+*.tmp
+*.bak
+
+# Node / web
+node_modules/
+dist/
+client/dist/
+*.log
+
+# Go
+bin/
+coverage/
+*.out
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Generated media/data
+frames/
+chroma_data/
+chroma-data/
+*.db
+
+# Env files
+.env
+.env.*

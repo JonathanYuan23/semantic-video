@@ -9,7 +9,12 @@ API daemon for frame extraction plus an Electron-wrapped React client.
 - **Swagger docs**:
   - Generate: `swag init -g cmd/daemon/main.go -o internal/docs`
   - View UI: http://localhost:8080/swagger
-- Env: `FRAMES_ROOT` optional (defaults to `frames/`)
+- Env: `FRAMES_ROOT` optional (defaults to `frames/`); `VECTORDB_URL` (defaults to `http://localhost:8000`) for the vector service proxy; set `STATELESS_MODE=1` (or `STATELESS_TEST=1`) for temp frame storage cleaned on shutdown (also set on the vectordb service for ephemeral Chroma data).
+
+### Startup order
+1) **Start the vectordb service** (embeddings + search). See `vectordb/README.md` for build/run instructions.
+2) **Start the Go daemon** (`go run cmd/daemon/main.go`) so it can proxy to vectordb and stream video files.
+3) **Start the client** (Electron/Vite) to use the UI.
 
 ## Client (Electron + Vite/React)
 - **Prereqs**: Node.js 18+, npm, Electron-capable environment (WSLg or native desktop)

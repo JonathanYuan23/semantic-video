@@ -31,6 +31,9 @@ docker run -p 8000:8000 -v "${PWD}/chroma-data:/data/chroma" semantic-video
 
 # Run the container (Windows Command Prompt)
 # docker run -p 8000:8000 -v "%cd%/chroma-data:/data/chroma" semantic-video
+
+# Stateless test runs
+- Set `STATELESS_MODE=1` (or `STATELESS_TEST=1`) to force Chroma to use a temporary directory that is deleted on shutdown. Example: `docker run -e STATELESS_MODE=1 -p 8000:8000 semantic-video`.
 ```
 
 The API will be available at `http://localhost:8000`.
@@ -310,4 +313,3 @@ To run locally without Docker:
    ```bash
    uvicorn main:app --reload
    ```
-

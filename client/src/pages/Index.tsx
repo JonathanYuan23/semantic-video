@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CloudStatus } from "@/components/CloudStatus";
 import { SearchBar } from "@/components/SearchBar";
@@ -11,20 +11,16 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Loader2, Library, Search as SearchIcon, Activity } from "lucide-react";
-import { listVideos, VideoRecord } from "@/lib/api";
-
-interface SearchResult {
-  filename: string;
-  timestamps: number[];
-  relevanceScore?: number;
-}
+import { API_BASE, searchVideos, SearchMatch } from "@/lib/api";
 
 const Index = () => {
-  const [results, setResults] = useState<SearchResult[]>([]);
+  const [results, setResults] = useState<SearchMatch[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [lastQuery, setLastQuery] = useState("");
-  const [selectedVideo, setSelectedVideo] = useState<{ filename: string; timestamp: number } | null>(null);
+  const [selectedVideo, setSelectedVideo] = useState<{ videoId?: string; filename: string; timestamp: number } | null>(null);
+  const [videoUrl, setVideoUrl] = useState<string>("");
+  const playerRef = useRef<HTMLDivElement>(null);
 
   const handleSearch = async (query: string) => {
     setLoading(true);
@@ -32,18 +28,12 @@ const Index = () => {
     setHasSearched(true);
 
     try {
-      const videos = await listVideos();
-      const queryLower = query.toLowerCase();
-      const matches = videos.filter((v) => v.path.toLowerCase().includes(queryLower) || v.id.toLowerCase().includes(queryLower));
-      const mapped: SearchResult[] = matches.map((v) => ({
-        filename: v.path,
-        timestamps: [],
-      }));
-      setResults(mapped);
-      if (mapped.length === 0) {
+      const matches = await searchVideos(query, 20, 0);
+      setResults(matches);
+      if (matches.length === 0) {
         toast.info("No matching videos found");
       } else {
-        toast.success(`Found ${mapped.length} video(s)`);
+        toast.success(`Found ${matches.length} match(es)`);
       }
     } catch (error) {
       console.error("Search error:", error);
@@ -54,15 +44,39 @@ const Index = () => {
     }
   };
 
-  const handleOpenTimestamp = (filename: string, timestamp: number) => {
-    setSelectedVideo({ filename, timestamp });
-    toast.success(`Opening ${filename} at ${timestamp}s`);
+  const handleOpenTimestamp = (filename: string, timestamp: number, videoId?: string) => {
+    setSelectedVideo({ filename, timestamp, videoId });
+    toast.success(`Opening ${filename} at ${Math.round(timestamp)}s`);
+    requestAnimationFrame(() => {
+      playerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   };
 
-  const handleSelectVideo = (filename: string) => {
-    setSelectedVideo({ filename, timestamp: 0 });
+  const handleSelectVideo = (filename: string, videoId?: string) => {
+    setSelectedVideo({ filename, timestamp: 0, videoId });
     toast.success(`Loading ${filename.split("/").pop()}`);
   };
+
+  useEffect(() => {
+    if (!selectedVideo) {
+      setVideoUrl("");
+      return;
+    }
+
+    if (selectedVideo.videoId) {
+      setVideoUrl(`${API_BASE}/videos/${selectedVideo.videoId}/file`);
+      return;
+    }
+
+    const name = selectedVideo.filename || "";
+    if (name.startsWith("http")) {
+      setVideoUrl(name);
+    } else if (name.startsWith("/")) {
+      setVideoUrl(`file://${name}`);
+    } else {
+      setVideoUrl(name);
+    }
+  }, [selectedVideo]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -105,7 +119,7 @@ const Index = () => {
             <SearchBar onSearch={handleSearch} loading={loading} />
 
             {selectedVideo && (
-              <div className="space-y-3">
+              <div className="space-y-3" ref={playerRef}>
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-semibold">Now Playing</h3>
                   <Badge variant="secondary" className="font-mono">
@@ -113,8 +127,10 @@ const Index = () => {
                   </Badge>
                 </div>
                 <VideoPlayer 
+                  videoUrl={videoUrl}
                   startTime={selectedVideo.timestamp}
                   filename={selectedVideo.filename}
+                  onClose={() => setSelectedVideo(null)}
                 />
               </div>
             )}
@@ -138,30 +154,33 @@ const Index = () => {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h2 className="text-xl font-semibold">Search Results</h2>
-                  <Badge variant="secondary">
-                    {results.length} video{results.length !== 1 ? 's' : ''} found
-                  </Badge>
-                </div>
+          <Badge variant="secondary">
+            {results.length} match{results.length !== 1 ? 'es' : ''}
+          </Badge>
+        </div>
 
-                <div className="space-y-3">
-                  {results.map((result, idx) => (
-                    <VideoResult
-                      key={idx}
-                      filename={result.filename}
-                      timestamps={result.timestamps}
-                      relevanceScore={result.relevanceScore}
-                      onOpenTimestamp={handleOpenTimestamp}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
+        <div className="space-y-3">
+          {results.map((result, idx) => (
+            <VideoResult
+              key={idx}
+              videoId={result.videoId}
+              filename={result.videoPath || result.videoId}
+              timestamps={[result.timestamp]}
+              relevanceScore={result.relevanceScore}
+              rank={idx + 1}
+              bestScore={results[0]?.relevanceScore}
+              onOpenTimestamp={(file, ts, vid) => handleOpenTimestamp(file, ts, vid)}
+            />
+          ))}
+        </div>
+      </div>
+    )}
           </TabsContent>
 
           {/* Library Tab */}
           <TabsContent value="library">
             <VideoLibrary 
-              onSelectVideo={handleSelectVideo}
+              onSelectVideo={(video) => handleSelectVideo(video.path, video.id)}
             />
           </TabsContent>
 

@@ -22,22 +22,48 @@ type Server struct {
 	videoByPath  map[string]string
 	cloud        CloudState
 	framesRoot   string
+	vectorClient *VectorDBClient
+	stateless    bool
+	cleanupDirs  []string
+	cleanupOnce  sync.Once
 }
 
 func NewServer() *Server {
 	cfg := Config{
 		FrameRate:       1.0,
-		FrameSize:       [2]int{400, 400},
+		FrameSize:       [2]int{224, 224},
 		UploadBatchSize: 50,
 		CloudBaseURL:    "https://api.example.com",
 		CloudUserID:     "user_123",
 		CloudAuthStatus: "missing_token",
+		VectorDBURL:     "http://localhost:8000",
+		Stateless:       false,
 	}
 
 	framesRoot := os.Getenv("FRAMES_ROOT")
+	stateless := os.Getenv("STATELESS_TEST") == "1" || os.Getenv("STATELESS_MODE") == "1"
+	if stateless {
+		if tmp, err := os.MkdirTemp("", "semantic-video-frames-"); err == nil {
+			framesRoot = tmp
+		}
+	}
+
 	if framesRoot == "" {
 		framesRoot = "frames"
 	}
+
+	vectorURL := os.Getenv("VECTORDB_URL")
+	if vectorURL == "" {
+		vectorURL = cfg.VectorDBURL
+	}
+
+	cleanupDirs := []string{}
+	if stateless {
+		cleanupDirs = append(cleanupDirs, framesRoot)
+	}
+
+	cfg.VectorDBURL = vectorURL
+	cfg.Stateless = stateless
 
 	return &Server{
 		config:       cfg,
@@ -52,7 +78,10 @@ func NewServer() *Server {
 				UserID: cfg.CloudUserID,
 			},
 		},
-		framesRoot: framesRoot,
+		framesRoot:   framesRoot,
+		vectorClient: NewVectorDBClient(vectorURL),
+		stateless:    stateless,
+		cleanupDirs:  cleanupDirs,
 	}
 }
 
@@ -97,14 +126,31 @@ func (s *Server) Routes() http.Handler {
 		r.MethodFunc(http.MethodGet, "/", s.handleGetVideo)
 		r.MethodFunc(http.MethodPost, "/extract", s.handleExtract)
 		r.MethodFunc(http.MethodPost, "/cancel", s.handleCancel)
+		r.MethodFunc(http.MethodGet, "/file", s.handleVideoFile)
 	})
 
 	// Jobs
 	r.MethodFunc(http.MethodGet, "/jobs", s.handleJobs)
+
+	// Search proxy
+	r.MethodFunc(http.MethodPost, "/search", s.handleSearch)
+	r.MethodFunc(http.MethodPost, "/search_video", s.handleSearch)
 
 	// Cloud
 	r.MethodFunc(http.MethodGet, "/cloud/status", s.handleCloudStatus)
 	r.MethodFunc(http.MethodPost, "/cloud/auth", s.handleCloudAuth)
 
 	return r
+}
+
+// Cleanup removes temporary data when stateless mode is enabled.
+func (s *Server) Cleanup() {
+	if !s.stateless {
+		return
+	}
+	s.cleanupOnce.Do(func() {
+		for _, dir := range s.cleanupDirs {
+			_ = os.RemoveAll(dir)
+		}
+	})
 }

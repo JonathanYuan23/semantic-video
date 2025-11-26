@@ -1,40 +1,82 @@
 import { useRef, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Play, Pause, Volume2, VolumeX, Maximize } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize, X } from "lucide-react";
 import { useState } from "react";
 
 interface VideoPlayerProps {
   videoUrl?: string;
   startTime?: number;
   filename?: string;
+  onClose?: () => void;
 }
 
 export const VideoPlayer = ({ 
   videoUrl = "", 
   startTime = 0,
-  filename = "video.mp4"
+  filename = "video.mp4",
+  onClose,
 }: VideoPlayerProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const lastUrl = useRef<string>("");
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
   useEffect(() => {
-    if (videoRef.current && startTime > 0) {
-      videoRef.current.currentTime = startTime;
+    const video = videoRef.current;
+    if (!video) return;
+
+    const sameSource = lastUrl.current === videoUrl && videoUrl !== "";
+    setPlaying(false);
+    setCurrentTime(startTime || 0);
+
+    const handlePlay = () => setPlaying(true);
+    const handlePause = () => setPlaying(false);
+    video.addEventListener("play", handlePlay);
+    video.addEventListener("pause", handlePause);
+
+    const setTime = () => {
+      try {
+        video.currentTime = startTime || 0;
+      } catch (_) {}
+    };
+
+    const handleMetadata = () => {
+      setDuration(video.duration || 0);
+      setTime();
+      video.play().catch(() => {});
+    };
+
+    if (sameSource) {
+      setTime();
+      video.play().catch(() => {});
+    } else {
+      if (!video.paused) {
+        video.pause();
+      }
+      video.addEventListener("loadedmetadata", handleMetadata);
+      video.load();
+      lastUrl.current = videoUrl;
     }
-  }, [startTime]);
+
+    return () => {
+      video.removeEventListener("play", handlePlay);
+      video.removeEventListener("pause", handlePause);
+      video.removeEventListener("loadedmetadata", handleMetadata);
+    };
+  }, [videoUrl, startTime]);
 
   const togglePlay = () => {
     if (videoRef.current) {
       if (playing) {
         videoRef.current.pause();
+        setPlaying(false);
       } else {
         videoRef.current.play();
+        setPlaying(true);
       }
-      setPlaying(!playing);
     }
   };
 
@@ -61,12 +103,6 @@ export const VideoPlayer = ({
     }
   };
 
-  const handleLoadedMetadata = () => {
-    if (videoRef.current) {
-      setDuration(videoRef.current.duration);
-    }
-  };
-
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const time = parseFloat(e.target.value);
     if (videoRef.current) {
@@ -86,14 +122,24 @@ export const VideoPlayer = ({
   return (
     <Card className="overflow-hidden gradient-card border-border/50">
       <div className="relative group">
+        {onClose && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onClose}
+            className="absolute top-2 right-2 z-10 text-white bg-black/40 hover:bg-black/60"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        )}
         {hasSource ? (
           <video
             ref={videoRef}
             src={videoUrl}
             className="w-full aspect-video bg-black"
             onTimeUpdate={handleTimeUpdate}
-            onLoadedMetadata={handleLoadedMetadata}
             onClick={togglePlay}
+            autoPlay={startTime > 0}
           />
         ) : (
           <div className="w-full aspect-video bg-muted flex items-center justify-center text-muted-foreground text-sm">

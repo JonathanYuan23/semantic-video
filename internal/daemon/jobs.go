@@ -1,10 +1,13 @@
 package daemon
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"math"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -26,7 +29,10 @@ func (s *Server) startJob(videoID string, reindex bool) (*Job, error) {
 		video.IndexStatus = "pending"
 		video.LastError = nil
 	}
-	video.IndexStatus = "indexing"
+	video.FramesExtracted = 0
+	video.FramesUploaded = 0
+	video.TotalFramesExpected = 0
+	video.IndexStatus = "extracting"
 	video.LastError = nil
 
 	jobID := newID("job_")
@@ -116,7 +122,7 @@ func (s *Server) runJob(jobID string, cancelCh <-chan struct{}) {
 	job.Status = "running"
 	job.Progress = 0
 	job.UpdatedAt = now
-	video.IndexStatus = "indexing"
+	video.IndexStatus = "extracting"
 	video.LastError = nil
 	s.mu.Unlock()
 
@@ -124,6 +130,7 @@ func (s *Server) runJob(jobID string, cancelCh <-chan struct{}) {
 		s.failJob(jobID, fmt.Errorf("prepare frames root: %w", err))
 		return
 	}
+	_ = os.RemoveAll(framesDir)
 
 	errCh := make(chan error, 1)
 	go func(path string) {
@@ -141,9 +148,17 @@ func (s *Server) runJob(jobID string, cancelCh <-chan struct{}) {
 		case err := <-errCh:
 			if err != nil {
 				s.failJob(jobID, fmt.Errorf("extract frames: %w", err))
-			} else {
-				s.completeJob(jobID, framesDir)
+				return
 			}
+			if err := s.indexFrames(jobID, framesDir, cancelCh); err != nil {
+				if errors.Is(err, context.Canceled) {
+					s.markJobCancelled(jobID)
+				} else {
+					s.failJob(jobID, fmt.Errorf("index frames: %w", err))
+				}
+				return
+			}
+			s.completeJob(jobID)
 			return
 		case <-ticker.C:
 			if err := s.refreshJobProgress(jobID, framesDir); err != nil {
@@ -180,35 +195,69 @@ func (s *Server) refreshJobProgress(jobID, framesDir string) error {
 	video := s.videos[job.VideoID]
 	if frames > video.FramesExtracted {
 		video.FramesExtracted = frames
-		video.FramesUploaded = frames
 	}
-	expected := video.TotalFramesExpected
-	if expected <= 0 {
-		expected = frames
-		if expected <= 0 {
-			expected = 1
-		}
-		video.TotalFramesExpected = expected
+	if frames > video.TotalFramesExpected {
+		video.TotalFramesExpected = frames
 	}
-	progress := float64(frames) / float64(expected)
-	if progress >= 1 {
-		progress = math.Nextafter(1, 0)
-	}
-	if progress > job.Progress {
-		job.Progress = progress
-	}
+	s.updateProgressLocked(video, job, true)
 	job.UpdatedAt = time.Now().UTC()
-	video.IndexStatus = "indexing"
+	video.IndexStatus = "extracting"
 	s.mu.Unlock()
 	return nil
 }
 
-func (s *Server) completeJob(jobID, framesDir string) {
-	frames, err := countExtractedFrames(framesDir)
+func (s *Server) indexFrames(jobID, framesDir string, cancelCh <-chan struct{}) error {
+	framePaths, err := listFrameFiles(framesDir)
 	if err != nil {
-		s.failJob(jobID, fmt.Errorf("finalize frames: %w", err))
-		return
+		return err
 	}
+	if len(framePaths) == 0 {
+		return fmt.Errorf("no frames extracted")
+	}
+	if s.vectorClient == nil {
+		return fmt.Errorf("vectordb client missing")
+	}
+
+	s.mu.Lock()
+	job := s.jobs[jobID]
+	video := s.videos[job.VideoID]
+	video.IndexStatus = "indexing"
+	video.FramesUploaded = 0
+	video.FramesExtracted = len(framePaths)
+	video.TotalFramesExpected = len(framePaths)
+	s.updateProgressLocked(video, job, true)
+	s.mu.Unlock()
+
+	for i, framePath := range framePaths {
+		select {
+		case <-cancelCh:
+			return context.Canceled
+		default:
+		}
+
+		frameNumber := i + 1
+		timestamp := float64(frameNumber-1) / s.config.FrameRate
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		_, err := s.vectorClient.UploadImage(ctx, UploadImageRequest{
+			FilePath:    framePath,
+			VideoID:     video.ID,
+			VideoPath:   video.Path,
+			FrameNumber: frameNumber,
+			Timestamp:   timestamp,
+			FrameRate:   s.config.FrameRate,
+		})
+		cancel()
+		if err != nil {
+			return err
+		}
+
+		s.markFrameUploaded(jobID, i+1, len(framePaths))
+	}
+
+	return nil
+}
+
+func (s *Server) markFrameUploaded(jobID string, uploaded, total int) {
 	now := time.Now().UTC()
 	s.mu.Lock()
 	job, ok := s.jobs[jobID]
@@ -217,13 +266,58 @@ func (s *Server) completeJob(jobID, framesDir string) {
 		return
 	}
 	video := s.videos[job.VideoID]
+	if uploaded > video.FramesUploaded {
+		video.FramesUploaded = uploaded
+	}
+	if total > video.TotalFramesExpected {
+		video.TotalFramesExpected = total
+	}
+	if video.FramesExtracted < total {
+		video.FramesExtracted = total
+	}
+	s.updateProgressLocked(video, job, true)
+	job.UpdatedAt = now
+	video.IndexStatus = "indexing"
+	s.mu.Unlock()
+}
+
+func (s *Server) updateProgressLocked(video *Video, job *Job, clamp bool) {
+	expected := video.TotalFramesExpected
+	if expected <= 0 {
+		expected = video.FramesUploaded
+		if expected <= 0 {
+			expected = 1
+		}
+		video.TotalFramesExpected = expected
+	}
+	progress := float64(video.FramesUploaded) / float64(expected)
+	if clamp && progress >= 1 && (job == nil || job.Status != "done") {
+		progress = math.Nextafter(1, 0)
+	}
+	if job != nil && progress > job.Progress {
+		job.Progress = progress
+	}
+}
+
+func (s *Server) completeJob(jobID string) {
+	now := time.Now().UTC()
+	s.mu.Lock()
+	job, ok := s.jobs[jobID]
+	if !ok {
+		s.mu.Unlock()
+		return
+	}
+	video := s.videos[job.VideoID]
+	if video.FramesExtracted < video.FramesUploaded {
+		video.FramesExtracted = video.FramesUploaded
+	}
+	if video.TotalFramesExpected < video.FramesUploaded {
+		video.TotalFramesExpected = video.FramesUploaded
+	}
 	job.Status = "done"
 	job.Progress = 1
 	job.UpdatedAt = now
 	video.IndexStatus = "indexed"
-	video.FramesExtracted = frames
-	video.FramesUploaded = frames
-	video.TotalFramesExpected = frames
 	video.LastError = nil
 	video.LastIndexedAt = &now
 	s.cloud.Status.Connected = s.cloud.AccessToken != ""
@@ -271,22 +365,31 @@ func (s *Server) markJobCancelled(jobID string) {
 }
 
 func countExtractedFrames(dir string) (int, error) {
+	frames, err := listFrameFiles(dir)
+	if err != nil {
+		return 0, err
+	}
+	return len(frames), nil
+}
+
+func listFrameFiles(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return 0, nil
+			return nil, nil
 		}
-		return 0, err
+		return nil, err
 	}
-	count := 0
+	frames := make([]string, 0, len(entries))
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
 		}
 		name := entry.Name()
 		if strings.HasPrefix(name, "frame_") && strings.HasSuffix(name, ".jpg") {
-			count++
+			frames = append(frames, filepath.Join(dir, name))
 		}
 	}
-	return count, nil
+	sort.Strings(frames)
+	return frames, nil
 }
