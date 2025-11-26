@@ -31,7 +31,7 @@ type Server struct {
 func NewServer() *Server {
 	cfg := Config{
 		FrameRate:       1.0,
-		FrameSize:       [2]int{224, 224},
+		FrameSize:       [2]int{384, 384},
 		UploadBatchSize: 50,
 		CloudBaseURL:    "https://api.example.com",
 		CloudUserID:     "user_123",

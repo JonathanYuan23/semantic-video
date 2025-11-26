@@ -39,12 +39,12 @@ func main() {
 			&cli.IntFlag{
 				Name:  "frame-width",
 				Usage: "Output frame width in pixels",
-				Value: 224,
+				Value: 384,
 			},
 			&cli.IntFlag{
 				Name:  "frame-height",
 				Usage: "Output frame height in pixels",
-				Value: 224,
+				Value: 384,
 			},
 		},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
