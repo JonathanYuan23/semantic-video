@@ -1,26 +1,45 @@
 # Semantic Video
 
-API daemon for frame extraction plus an Electron-wrapped React client.
+A desktop app for searching your local videos with natural language. Add a video or folder, let the app index it, then describe what you want to find and jump directly to the matching moments.
 
-## Daemon (API)
-- **Prereqs**: Go 1.22+, FFmpeg installed
-- **Install deps**: `go mod tidy`
-- **Run**: `go run cmd/daemon/main.go` (listens on `:8080`)
-- **Swagger docs**:
-  - Generate: `swag init -g cmd/daemon/main.go -o internal/docs`
-  - View UI: http://localhost:8080/swagger
-- Env: `FRAMES_ROOT` optional (defaults to `frames/`); `VECTORDB_URL` (defaults to `http://localhost:8000`) for the vector service proxy; set `STATELESS_MODE=1` (or `STATELESS_TEST=1`) for temp frame storage cleaned on shutdown (also set on the vectordb service for ephemeral Chroma data).
+## Demo
 
-### Startup order
-1) **Start the vectordb service** (embeddings + search). See `vectordb/README.md` for build/run instructions.
-2) **Start the Go daemon** (`go run cmd/daemon/main.go`) so it can proxy to vectordb and stream video files.
-3) **Start the client** (Electron/Vite) to use the UI.
+![Semantic Video search demo](assets/semantic-video-demo.gif)
 
-## Client (Electron + Vite/React)
-- **Prereqs**: Node.js 18+, npm, Electron-capable environment (WSLg or native desktop)
-- **Install deps**: `cd client && npm install`
-- **Dev (Electron + Vite)**: `npm run electron:dev`
-  - Vite dev server fixed at http://localhost:5173; Electron launches with preload exposing `window.electronAPI`.
-  - Use DevTools in the Electron window; `!!window.electronAPI` should be true.
-- **Prod build (client-only)**: `npm run build` (outputs `dist/`; Electron packaging not wired yet)
-- **File/folder selection**: Use the built-in pickers in the Video Library tab (no manual path entry); absolute paths are sent to the daemon. Recursive scan toggle is available.
+## Run locally
+
+[Docker Desktop](https://www.docker.com/products/docker-desktop/) must be installed manually and opened once. The remaining setup is automated on macOS; the script skips tools and dependencies that are already installed, and it is safe to run again.
+
+```bash
+./scripts/setup.sh
+./scripts/dev.sh
+```
+
+`dev.sh` starts the vector service, Go API, and Electron client in the correct order. Press `Ctrl-C` to stop the services it started.
+
+To inspect setup without changing your computer, or to verify an existing installation:
+
+```bash
+./scripts/setup.sh --dry-run
+./scripts/setup.sh --check
+```
+
+## Test
+
+Run the environment checks, Go tests, and client production build together:
+
+```bash
+./scripts/test.sh
+```
+
+## Architecture
+
+![Semantic Video architecture](assets/semantic-video-architecture.svg)
+
+Editable source: [`assets/semantic-video-architecture.excalidraw`](assets/semantic-video-architecture.excalidraw)
+
+- The Electron and React client provides the desktop interface and native file and folder pickers. Vite serves it at `http://localhost:5173` during development.
+- The Go API manages videos, extracts frames with FFmpeg, and streams video files. Its API and Swagger UI are available at `http://localhost:8080` and `http://localhost:8080/swagger`.
+- The Python vector service generates CLIP embeddings and searches ChromaDB. It runs in Docker at `http://localhost:8000`.
+
+The client talks to the Go API, which proxies indexing and search operations to the vector service. Development runs are stateless by default, so indexed data and extracted frames are cleaned up when the services stop; the downloaded embedding model remains cached in a Docker volume.
